@@ -28,7 +28,7 @@ def fit_angle(graph,labels):
     src_nodes = graph.edges()[0]
     dst_nodes = graph.edges()[1]
     err_label = []
-    print("labels:", labels, "edge_label:", edge_label)
+    #print("labels:", labels, "edge_label:", edge_label)
     if not any(edge_label == 0):
         err_label.append(labels)
         return None, None, None, None, err_label     
