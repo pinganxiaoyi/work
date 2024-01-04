@@ -184,7 +184,7 @@ class Make_Graphs(DGLDataset):
                         for n in range (nhits2):
                             src_list.append(hits1['hitIndex'].values[m])
                             vec1 = TVector3()
-                            vec1.SetXYZ( hits1['fithits/fithits.pos.x'].values[m],
+                            vec1.SetXYZ( hits1['fithits/fithits.pos.'].values[m],
                                          hits1['fithits/fithits.pos.y'].values[m],
                                          hits1['fithits/fithits.pos.z'].values[m] )
 
