@@ -10,6 +10,7 @@ import dgl
 from dgl.data import DGLDataset
 from pathlib import Path
 import ROOT
+from dgl.dataloading import GraphDataLoader
 #import matplotlib.pyplot as plt
 #import networkx as nx
 
@@ -45,12 +46,9 @@ class Make_Graphs(DGLDataset):
         print("uproot file is ",self.file_path)
         events = file["events"]
 # 在 process 函数中
-
         b_fitCellCode_np = events['fithits/fithits.cellCode'].array(library="np")
         b_fitTrackID_np = events['fithits/fithits.trackID'].array(library="np")
         num_of_events = b_fitCellCode_np.size
-
-
         fitCellCode_ak = []
         print("一共有",num_of_events)
         label_ak = [] #label from trackID, (trackID=3, label=0), (trackID!=3, label=1)
@@ -72,11 +70,14 @@ class Make_Graphs(DGLDataset):
             label_ak.append(b_label_np_1d)
             
 ### awkward array to pandas data frame
+
         fitCellCode_ak = ak.from_iter(fitCellCode_ak)
         label_ak = ak.from_iter(label_ak)
 
 ### input tree --> awkward --> pandas data frame
         fithits0 = events.arrays(["fithits/fithits.cellCode", "fithits/fithits.pos.x", "fithits/fithits.pos.y", "fithits/fithits.pos.z", "fithits/fithits.edep", "fithits/fithits.trackID"], library="ak")
+        
+
 #fithits0 = ak.to_dataframe(fithits0, anonymous = 'cellCode', 'posX', 'posY', 'posZ', 'edep', 'trackID')
         fithits0 = ak.to_dataframe(fithits0)
 
@@ -93,8 +94,12 @@ class Make_Graphs(DGLDataset):
         fitTrackID_df = ak.to_dataframe(label_ak, anonymous='label')
 ### concat fithits1[posXYZ, edep] with layerID(for layer pair grouping), trackID( for node label)
         fithits = pd.concat([fithits1, fitLayerID_df, fitTrackID_df], axis=1)
-        #print(fithits)
-
+        
+        #=-print(fithits)
+        for i in range(1010,1011):
+            print("Event", i)
+            print("X Position:", fithits0["fithits/fithits.pos.x"][i])
+            
        # print("==========pre-processing of the data frame done==========")
        # print("move into event loop-------->")
         layer_pairs = [(2,4), (4,6), (6,8), (8,10), (10,12),(1,3),(3,5),(5,7),(7,9),(9,11),(11,13),(0,2)]
@@ -106,7 +111,8 @@ class Make_Graphs(DGLDataset):
         self.labels = []
 #for jentry in range(num_of_events): ### loop over all events
         #for jentry in range(num_of_events):
-        for jentry in range(start_index,end_index):
+        #for jentry in range(start_index,end_index):
+        for jentry in range(1010,1011):
         #for jentry in range(100):
         #for jentry in range(95,96):
         #for jentry in range(1000):
@@ -120,10 +126,14 @@ class Make_Graphs(DGLDataset):
             # locate rows in corresponding to the sub entries by [0 : sub_entry] 
             # and all the columns of hits pos, trackID, layerID   
             # return hits0 as pandas data frame  
+            
             hits0 = fithits.iloc[ sub_entry:sub_entry + fithits_per_event, 0:7]
             hits0 = hits0[hits0[ 'fithits/fithits.trackID' ].isin(gn_trackID) == False ] # remove geantino entries from pandas dataframe
             #hits0 = hits0[hits0[ 'layerID' ].isin(track_layer) == False ] # remove geantino entries from pandas dataframe
             #print(hits0)
+            for i in range(len(hits0)):
+                print("subEvent", i)
+                print("X Position:", hits0.iloc[i]["fithits/fithits.pos.x"])
 
             # add hit index[0-n] for graph construction
             hitIndex = hits0['label'].copy(deep=True)
@@ -131,6 +141,9 @@ class Make_Graphs(DGLDataset):
                 hitIndex.iloc[ nhits ] = nhits
             hitIndex = hitIndex.rename('hitIndex')
             hits0 = pd.concat([hits0, hitIndex], axis=1)
+            for i in range(len(hits0)):
+                print("subEvent", i)
+                print("X Position:", hits0.iloc[i]["fithits/fithits.pos.x"])
             if(len(hits0.axes[0])) < 1:
                 continue #TODO, overlapping
 
@@ -184,7 +197,7 @@ class Make_Graphs(DGLDataset):
                         for n in range (nhits2):
                             src_list.append(hits1['hitIndex'].values[m])
                             vec1 = TVector3()
-                            vec1.SetXYZ( hits1['fithits/fithits.pos.'].values[m],
+                            vec1.SetXYZ( hits1['fithits/fithits.pos.x'].values[m],
                                          hits1['fithits/fithits.pos.y'].values[m],
                                          hits1['fithits/fithits.pos.z'].values[m] )
 
@@ -223,6 +236,9 @@ class Make_Graphs(DGLDataset):
             ##TODO, transformed torch or not ? in Graph
             hit_features = torch.from_numpy(np.array(hit_list)).T
             hit_features2 = torch.from_numpy(np.array(hit_list))
+            for i in range(len(hits0)):
+                print("subEvent", i)
+                print("X Position:", hits0.iloc[i]["fithits/fithits.pos.x"])
 
             edges_src = torch.from_numpy(np.array(src_list))
             edges_dst = torch.from_numpy(np.array(dst_list))
@@ -318,6 +334,7 @@ class Make_Graphs(DGLDataset):
             #label=1
             #self.labels.append(label)
             self.labels.append(jentry)
+            print("labels",jentry)
             '''
             print(gr)
             print('Node features')
@@ -332,7 +349,7 @@ class Make_Graphs(DGLDataset):
             #gr = dgl.graph(( edges_src , edges_dst ) , num_nodes = 2 )
             gr = dgl.graph(( edges_src , edges_dst ))
             '''
-            print('next event----', jentry)
+            #print('next event----', jentry)
     def calculate_val_indices(self, num_of_events):
         # 根据您的需求计算验证集的起止索引
         # 例如，如果验证集是数据的 70% 到 90%
@@ -346,7 +363,15 @@ class Make_Graphs(DGLDataset):
     def __len__(self):
         return len(self.graphs)
 
-#dataset = Make_Graphs("F:\\work\\muon_10GeV_noCalo_comp_vertical-center.g4mac.root",data_part="val")
+dataset = Make_Graphs("F:\\work\\muon_10GeV_noCalo_comp_vertical-center-nY.g4mac.root",data_part="val")
+loader = GraphDataLoader(dataset, batch_size=1, shuffle=False)
+for num,(graphs, labels) in enumerate(loader): 
+    if labels in range(1000,1020):
+        print("labels",labels)
+        print("graphs",graphs)
+        print("graphs.ndata['feat']",graphs.ndata['feat'])
+        continue
+
 '''
 print(dataset.count)
 print(len(dataset))
@@ -376,4 +401,4 @@ print("labels有",label)
 #?nx.draw(nx_graph, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
 #plt.title(f"Event {label}")
 #plt.show()
-'''
+    '''

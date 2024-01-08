@@ -37,8 +37,7 @@ class Make_Graphs(DGLDataset):
         num_of_events = b_fitCellCode_np.size
         self.graphs = []
         self.labels = []
-        fitCellCode_ak = []
-        label_ak = [] #label from trackID, (trackID=3, label=0), (trackID!=3, label=1)
+         
         start_index = 0
         end_index = num_of_events
         if self.data_part == "val":
@@ -104,64 +103,29 @@ class Make_Graphs(DGLDataset):
 
                 except KeyError as e:
                     continue
-        
-        for jentry in range(num_of_events):
-        #for jentry in range(1):
-            b_fitCellCode_np_1d = ((b_fitCellCode_np[jentry]%10000)/100).astype(int)   
-            b_label_np_1d = b_fitTrackID_np[jentry]
-            #print("b_label_np_1d",b_label_np_1d)
-            b_label_np_1d = np.where(b_label_np_1d == 3, 0, 1) #git, trouble shooting issue #2 
-            #//fitCellCode_ak.append(b_fitCellCode_np_1d)
-            #//label_ak.append(b_label_np_1d)
-            #print(b_label_np_1d)
-### awkward array to pandas data frame
-        #//fitCellCode_ak = ak.from_iter(fitCellCode_ak)
-        #//label_ak = ak.from_iter(label_ak)
-        
-### input tree --> awkward --> pandas data frame
-        fithits0 = events.arrays(["fithits/fithits.cellCode","fithits/fithits.trackID", "fithits/fithits.pos.x", "fithits/fithits.pos.y", "fithits/fithits.pos.z", "fithits/fithits.edep", "fithits/fithits.trackID"], library = "np")
-#fithits0 = ak.to_dataframe(fithits0, anonymous = 'cellCode', 'posX', 'posY', 'posZ', 'edep', 'trackID')
-        #fithits0 = ak.to_dataframe(fithits0)
+
+        fithits0 = events.arrays(["fithits/fithits.cellCode","fithits/fithits.trackID", "fithits/fithits.pos.x", "fithits/fithits.pos.y", "fithits/fithits.pos.z", "fithits/fithits.edep"], library = "np")
         cellcode,trackID,pos_x, pos_y, pos_z, edep = fithits0
-        label = np.where(trackID == 3, 0, 1)
+        gn_trackID = [1,2] # geantino trackID
+
+        #label from trackID, (trackID=3, label=0), (trackID!=3, label=1)
+        label = np.where(np.isin(trackID, gn_trackID), -1, label)
+        label_filtered = label[label != -1]
+        label = np.where(label_filtered == 3, 0, 1)
         layer = ((cellcode%10000)/100).astype(int)
-        node_hits = np.stack([pos_x[jentry], pos_y[jentry], pos_z[jentry], edep[jentry],label[jentry],layer[jentry]], axis=1)
+               
         
-        gn_trackID = [1,2] # geantino trackID 
-        track_layer= [0,1,2,3,4,5,6,7,8,9,10,11,12,13]
-        track_x_layer= [1,3,5,7,9,11,13] # keep (x,y) layers into 3d point/layer
-        track_y_layer=[0,2,4,6,8,10,12]
-        #track_layer= [2,4,6,8,10,12]
-
-        fithits1 = fithits0.drop(columns='fithits/fithits.cellCode')
-
-
-### awkward array to pandas data frame
-        fitLayerID_df = ak.to_dataframe(fitCellCode_ak, anonymous='layerID')
-        fitTrackID_df = ak.to_dataframe(label_ak, anonymous='label')
-### concat fithits1[posXYZ, edep] with layerID(for layer pair grouping), trackID( for node label)
-        fithits = pd.concat([fithits1, fitLayerID_df, fitTrackID_df], axis=1)
-        #print(fithits)
-
-       # print("==========pre-processing of the data frame done==========")
-       # print("move into event loop-------->")
         y_layer_pairs = [(2,4), (4,6), (6,8), (8,10), (10,12),(0,2)]
-        #layer_pairs = [(2,4), (4,6), (6,8), (8,10), (10,12)]
         x_layer_pairs = [(1,3),(3,5),(5,7),(7,9),(9,11),(11,13)]
-#layer_pairs = [(6,8)]
-
 ## entry at event level, sub entry at number of hits in one specific event
         sub_entry = 0
-        self.graphs = []
-        self.labels = []
-
 #for jentry in range(num_of_events): ### loop over all events
         for jentry in range(num_of_events):
         #for jentry in range(200):
         #for jentry in range(95,96):
         #for jentry in range(1000):
             print("processing evt:", jentry)
-
+            fithits = np.stack([pos_x[jentry], pos_y[jentry], pos_z[jentry], edep[jentry],label[jentry],layer[jentry]], axis=1)
             fithits_per_event = b_fitCellCode_np[jentry].size #sub entry, hits per event
             #print("sub hits per events:", fithits_per_event)
             if(fithits_per_event < 1) :
@@ -170,9 +134,9 @@ class Make_Graphs(DGLDataset):
             # locate rows in corresponding to the sub entries by [0 : sub_entry] 
             # and all the columns of hits pos, trackID, layerID   
             # return hits0 as pandas data frame  
-            hits0 = fithits.iloc[ sub_entry:sub_entry + fithits_per_event, 0:7]
-            hits0 = hits0[hits0[ 'fithits/fithits.trackID' ].isin(gn_trackID) == False ] # remove geantino entries from pandas dataframe
-            hits0 = hits0[hits0[ 'layerID' ].isin(track_layer) == False ] # remove geantino entries from pandas dataframe
+            hits0 = fithits.iloc[ sub_entry:sub_entry + fithits_per_event, 0:6]
+            #hits0 = hits0[hits0[ 'fithits/fithits.trackID' ].isin(gn_trackID) == False ] # remove geantino entries from pandas dataframe
+            #hits0 = hits0[hits0[ 'layerID' ].isin(track_layer) == False ] # remove geantino entries from pandas dataframe
             #print(hits0)
 
             # add hit index[0-n] for graph construction
