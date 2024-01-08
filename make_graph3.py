@@ -1,31 +1,23 @@
-#import matplotlib
-#matplotlib.use('Agg')
 import numpy as np
 import awkward as ak
 import uproot
 import pandas as pd
-#import vector
 from ROOT import TVector3
 import torch
 import dgl
 from dgl.data import DGLDataset
 from pathlib import Path
+import ROOT
 #import matplotlib.pyplot as plt
 #import networkx as nx
 
-#class TVector3():
-#    def __init__ ( self, df):
-#        self._px = df[0]
-#        self._py = df[1]
-#        self._pz = df[2]
-#        vec1=vector.obj(x=df[0], y=df[1], z=df[2])
-#    def distance ( self , vec2 ):
-#        self.rvalue = self.vec1.deltaR(vec2)
 class Make_Graphs(DGLDataset):
 
-    def __init__(self):
+    def __init__(self,file_path,data_part="all"):
+        self.data_part = data_part
+        self.file_path = file_path
         super().__init__( name ='CustomDataset')
-
+        
     def process(self):
         #file = uproot.open("/herdfs/data/wangjunjing/top10cmx10cmVertical_mu-_100GeV_vertical_0307.root")
         #file = uproot.open("/herdfs/data/wangjunjing/top10cmx10cmVertical_gamma_0.5GeV.root")
@@ -40,16 +32,17 @@ class Make_Graphs(DGLDataset):
         #file = uproot.open("/herdfs/data/tangzc/testMC/Test2/1test/v2022a-test-2/proton/test-proton-vertical-full-1000GeV_n-————.root")
         print("uproot file is ",file_path)
         events = file["events"]
-        b_mcparts_pdgID = events['mcparts/mcparts.pdgID'].array(library="np")
-        
         b_fitCellCode_np = events['fithits/fithits.cellCode'].array(library="np")
-        
+        b_fitTrackID_np = events['fithits/fithits.trackID'].array(library="np")
         num_of_events = b_fitCellCode_np.size
-
+        self.graphs = []
+        self.labels = []
         fitCellCode_ak = []
-
         label_ak = [] #label from trackID, (trackID=3, label=0), (trackID!=3, label=1)
-
+        start_index = 0
+        end_index = num_of_events
+        if self.data_part == "val":
+            start_index,end_index = self.calculate_val_indices(num_of_events)
         #---------------------for different direction's layer ----------------------#
 
         def process_layer_pairs(layer_pairs, group, src_list, dst_list, R_list, deltaX_list, deltaY_list, deltaZ_list, deltaE_list, elable_list):
@@ -112,33 +105,28 @@ class Make_Graphs(DGLDataset):
                 except KeyError as e:
                     continue
         
-### convert cell code to layer code into     array
         for jentry in range(num_of_events):
         #for jentry in range(1):
-#for jentry in range(1):
-            b_fitCellCode_np_1d = ((b_fitCellCode_np[jentry]%10000)/100).astype(int)
-            b_mcparts_pdgID_np_1d = b_mcparts_pdgID[jentry]
-            
-            
-            print("b_mcparts_pdgID_np_1d", b_mcparts_pdgID_np_1d)
-             
+            b_fitCellCode_np_1d = ((b_fitCellCode_np[jentry]%10000)/100).astype(int)   
             b_label_np_1d = b_fitTrackID_np[jentry]
-            print("b_label_np_1d",b_label_np_1d)
-            
-            b_label_np_1d = np.where(b_label_np_1d==3, 0, 1) #git, trouble shooting issue #2 
-
-            fitCellCode_ak.append(b_fitCellCode_np_1d)
-            label_ak.append(b_label_np_1d)
-            print(b_label_np_1d)
+            #print("b_label_np_1d",b_label_np_1d)
+            b_label_np_1d = np.where(b_label_np_1d == 3, 0, 1) #git, trouble shooting issue #2 
+            #//fitCellCode_ak.append(b_fitCellCode_np_1d)
+            #//label_ak.append(b_label_np_1d)
+            #print(b_label_np_1d)
 ### awkward array to pandas data frame
-        fitCellCode_ak = ak.from_iter(fitCellCode_ak)
-        label_ak = ak.from_iter(label_ak)
-
+        #//fitCellCode_ak = ak.from_iter(fitCellCode_ak)
+        #//label_ak = ak.from_iter(label_ak)
+        
 ### input tree --> awkward --> pandas data frame
-        fithits0 = events.arrays(["fithits/fithits.cellCode", "fithits/fithits.pos.x", "fithits/fithits.pos.y", "fithits/fithits.pos.z", "fithits/fithits.edep", "fithits/fithits.trackID"], library="ak")
+        fithits0 = events.arrays(["fithits/fithits.cellCode","fithits/fithits.trackID", "fithits/fithits.pos.x", "fithits/fithits.pos.y", "fithits/fithits.pos.z", "fithits/fithits.edep", "fithits/fithits.trackID"], library = "np")
 #fithits0 = ak.to_dataframe(fithits0, anonymous = 'cellCode', 'posX', 'posY', 'posZ', 'edep', 'trackID')
-        fithits0 = ak.to_dataframe(fithits0)
-
+        #fithits0 = ak.to_dataframe(fithits0)
+        cellcode,trackID,pos_x, pos_y, pos_z, edep = fithits0
+        label = np.where(trackID == 3, 0, 1)
+        layer = ((cellcode%10000)/100).astype(int)
+        node_hits = np.stack([pos_x[jentry], pos_y[jentry], pos_z[jentry], edep[jentry],label[jentry],layer[jentry]], axis=1)
+        
         gn_trackID = [1,2] # geantino trackID 
         track_layer= [0,1,2,3,4,5,6,7,8,9,10,11,12,13]
         track_x_layer= [1,3,5,7,9,11,13] # keep (x,y) layers into 3d point/layer
@@ -279,7 +267,7 @@ class Make_Graphs(DGLDataset):
             gr.edata['dy'] = deltaY
             gr.edata['dz'] = deltaZ
             gr.edata['dE'] = deltaE
-            print(num_nodes)
+            #print(num_nodes)
             gr.edata['label'] = edge_labels
 
             #gr.ndata['u'] = hit_features2[edges_src]
