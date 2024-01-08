@@ -12,7 +12,7 @@ from make_graph import Make_Graphs
 from ROOT import TCanvas, TGraph2D 
 import math
 from make_graph import Make_Graphs
-
+from dgl.dataloading import GraphDataLoader
 from ROOT import TCanvas, TGraph2D
 
 ROOT.gROOT.SetBatch(True)
@@ -136,27 +136,26 @@ def fit_angle(graph,labels):
     pt_xy.AddText("with XY plane: {:.2f} degrees".format(theta0_xy))
     pt_xy.SetFillColor(0)
     pt_xy.Draw()
-    
+    c1.SaveAs(r"C:\Users\10094\Desktop\gr\gr_{}.png".format(label))
     return theta0_xy,theta0_xz,theta0_yz,tot_edep,err_label
     
 
     # 保存画布
-    #c1.SaveAs(r"C:\Users\10094\Desktop\gr\gr_{}.png".format(label))
-'''
+    
+
 angle_xy = []  # 存储 XY 平面角度
 angle_xz = []  # 存储 XZ 平面角度
 angle_yz = []  # 存储 YZ 平面角度
 edep = []      # 存储能量沉积
 err_labels = []  # 存储错误标签
-
-dataset = Make_Graphs("F:\\work\\test-proton-vertical-full-100GeV_n-simdigi.root")
-for num, (graph, label) in enumerate(dataset):
-    if num >= 20:  # 如果处理了 20 个图，则停止
-        break
-    xy, xz, yz, tot_edep, err = fit_angle(graph, label)
-    if err:
-        err_labels.extend(err)
-        continue
+dataset = Make_Graphs("F:\\work\\muon_10GeV_noCalo_comp_vertical-center-nY.g4mac.root",data_part="val")
+loader = GraphDataLoader(dataset, batch_size=1, shuffle=False)
+for graph, label in loader: 
+    if label in range(1000,1020):
+        xy, xz, yz, tot_edep, err = fit_angle(graph, label)
+        if err:
+            err_labels.extend(err)
+            continue
     angle_xy.append((label, xy))
     angle_xz.append((label, xz))
     angle_yz.append((label, yz))
@@ -166,8 +165,8 @@ for num, (graph, label) in enumerate(dataset):
 print("Error labels0:", err_labels)
 print("edep",edep)
 print("angel_xy",angle_xy)
-'''
-def selected_angle(graph, selected_edges):
+
+def selected_angle(graph,label, selected_edges):
     # 准备画布和图形
     c1 = ROOT.TCanvas("c1", "Graph", 800, 1800)
     c1.Divide(1, 3)
@@ -265,11 +264,11 @@ def selected_angle(graph, selected_edges):
     pt_xy.AddText("with XY plane: {:.2f} degrees".format(theta0_xy))
     pt_xy.SetFillColor(0)
     pt_xy.Draw()
-    #c1.SaveAs(f"selected_angle{label}.png")
+    c1.SaveAs(f"selected_angle{label}.png")
     
     return theta0_xy, theta0_xz, theta0_yz, tot_edep
 '''
-dataset = Make_Graphs("F:\\work\\muon_10GeV_noCalo_comp_vertical-center.g4mac.root",data_part="val")
+dataset = Make_Graphs("F:\\work\\muon_10GeV_noCalo_comp_vertical-center-ny.g4mac.root",data_part="val")
 angle_xy = []  # 存储 XY 平面角度
 angle_xz = []  # 存储 XZ 平面角度
 angle_yz = []  # 存储 YZ 平面角度
@@ -283,7 +282,7 @@ for num, (graph, labels) in enumerate(dataset):
     edge = []
     for i in range(len(src)):
         edge.append((src[i],dst[i]))
-    xy, xz, yz, tot_edep =selected_angle(graph,edge)
+    xy, xz, yz, tot_edep =selected_angle(graph,labels,edge)
     angle_xy.append((labels, xy))
     angle_xz.append((labels, xz))
     angle_yz.append((labels, yz))
